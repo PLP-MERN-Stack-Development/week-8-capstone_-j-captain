@@ -1,20 +1,49 @@
-# MWANGI JOSPHAT KARANJA  WK 5 ASSIGNMENT-Real-Time Chat Application with Socket.io
+# MWANGI JOSPHAT KARANJA  WK 8 MERN Stack Capstone Project - Emhanced Real-Time Chat Application with Socket.io
 
 A full-stack real-time chat application built with React.js, Node.js, Express.js, MongoDB, and Socket.io. This application features real-time messaging, user presence indicators, typing notifications, and more.
 
-## Features
+ 
+**🌟 Features**
+**💬 Core Chat Functionality**
+Real-time messaging with Socket.IO
+Multiple concurrent chat rooms
+Message history persistence
+Typing indicators
+Read receipts
 
-- **Real-time messaging** with Socket.io
-- **User authentication** (username-based)
-- **Global chat room** for all users
-- **Private messaging** between users
-- **Typing indicators** when users are composing messages
-- **Online/offline status** for users
-- **File uploads** (images and documents)
-- **Read receipts** for messages
-- **Responsive design** with Tailwind CSS
+**🔐 Authentication**
+User registration and login
+Password hashing with bcrypt
+Session management
 
-## Technologies Used
+**🖼️ Media Support**
+File uploads (images, documents)
+10MB file size limit
+File type detection
+Downloadable files
+
+**🛠️ Admin Features**
+Socket.IO admin UI
+Connection monitoring
+Room management
+
+User activity tracking
+
+**🎨 UI/UX**
+Responsive design
+Color-coded console logging
+ASCII art banners
+Connection status indicators
+
+**🛠️ Technology Stack**
+Component	Technology
+Frontend	React, Vite, Tailwind CSS
+Backend	Node.js, Express
+Real-Time	Socket.IO
+Database	MongoDB (Atlas for production)
+Authentication	Session-based with bcrypt
+File Storage	Local filesystem (production-ready)
+ 
 
 ### Frontend
 - React.js (Vite)
@@ -41,22 +70,22 @@ A full-stack real-time chat application built with React.js, Node.js, Express.js
 ### Backend Setup
 
 1. Navigate to the server directory:
-```bash
+ 
 cd server
-```
+ 
 
 2. Install backend dependencies:
-```bash
+ 
 npm install express socket.io mongoose cors dotenv jsonwebtoken bcryptjs multer path
-```
+ 
 
 3. Create a `.env` file in the server directory with the following variables:
-```
+ 
 MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret_key
 CLIENT_URL=http://localhost:5173
 PORT=5000
-```
+ 
 
 4. Start the backend server:
  
@@ -254,4 +283,34 @@ Deploy to:
    ![image7](<Screenshot (105).png>)
 
 
-Deployment link: https://github.com/PLP-MERN-Stack-Development/week-5-web-sockets-assignment-j-captain.git
+**🌐 DEPLOYMENT**
+Render Backened URL: `https://plp-mern-wk-7-socketio-chat-render.onrender.com` 
+Render Frontend URL: `https://plp-mern-wk-7-socketio-chat-render-b9o3.onrender.com`
+
+**🛡️ Security Features**
+CORS protection with whitelisted origins
+Password hashing with bcrypt
+File type validation
+Rate limiting (recommended addition)
+HTTPS enforced in production
+
+**📈 Performance**
+WebSocket and polling fallback
+Connection state recovery
+Message batching
+Efficient database queries
+File size limits
+
+**🤝 Contributing**
+Fork the project
+
+Create your feature branch (git checkout -b feature/AmazingFeature)
+Commit your changes (git commit -m 'Add some AmazingFeature')
+Push to the branch (git push origin feature/AmazingFeature)
+Open a Pull Request
+
+**📜 License**
+Distributed under the MIT License. See LICENSE for more information.
+
+**✉️ Contact**
+Project Maintainer - j-captain
