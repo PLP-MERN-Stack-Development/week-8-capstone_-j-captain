@@ -286,6 +286,7 @@ Deploy to:
 **🌐 DEPLOYMENT**
 Render Backened URL: `https://plp-mern-wk-7-socketio-chat-render.onrender.com` 
 Render Frontend URL: `https://plp-mern-wk-7-socketio-chat-render-b9o3.onrender.com`
+Gamma Pitch Deck Link: `https://gamma.app/docs/Enhanced-Socketio-ChatApppptx-zgvvz2die0ukj91`
 
 **🛡️ Security Features**
 CORS protection with whitelisted origins
