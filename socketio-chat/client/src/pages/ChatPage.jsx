@@ -12,11 +12,26 @@ export default function ChatPage({ username, onLogout }) {
   const [rooms, setRooms] = useState([]);
   const [currentRoom, setCurrentRoom] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, messageId: null });
   const typingTimeout = useRef(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const contextMenuRef = useRef(null);
   const readMessages = useRef(new Set());
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+        setContextMenu({ ...contextMenu, visible: false });
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [contextMenu]);
 
   useEffect(() => {
     if (!socket) return;
@@ -38,19 +53,30 @@ export default function ChatPage({ username, onLogout }) {
         setMessages([]);
       });
 
+      socket.on('roomHistory', history => {
+        setMessages(history);
+      });
+
       socket.on('message', msg => {
         if (msg.room === currentRoom) {
           setMessages(prev => [...prev, msg]);
           setTypingUsers(prev => prev.filter(u => u !== msg.username));
+          
+          // Mark message as read when received
+          if (msg.username !== username) {
+            socket.emit('messageRead', { messageId: msg._id });
+          }
         }
       });
 
-      socket.on('userConnection', data => {
-        setOnlineUsers(prev => {
-          const s = new Set(prev);
-          data.status === 'online' ? s.add(data.username) : s.delete(data.username);
-          return [...s];
-        });
+      socket.on('userJoined', ({ username: u, userCount }) => {
+        if (u !== username) {
+          setOnlineUsers(prev => [...new Set([...prev, u])]);
+        }
+      });
+
+      socket.on('userLeft', ({ username: u, userCount }) => {
+        setOnlineUsers(prev => prev.filter(user => user !== u));
       });
 
       socket.on('typing', ({ username: u, room }) => {
@@ -64,14 +90,37 @@ export default function ChatPage({ username, onLogout }) {
           setTypingUsers(prev => prev.filter(x => x !== u));
         }
       });
+
+      socket.on('readUpdate', ({ messageId, readBy }) => {
+        setMessages(prev => prev.map(msg => 
+          msg._id === messageId ? { ...msg, readBy } : msg
+        ));
+      });
+
+      socket.on('messageDeleted', ({ messageId, deletedForEveryone, deletedFor }) => {
+        if (deletedForEveryone) {
+          setMessages(prev => prev.filter(msg => msg._id !== messageId));
+        } else {
+          setMessages(prev => prev.map(msg => 
+            msg._id === messageId ? { ...msg, deletedFor } : msg
+          ));
+        }
+      });
+
+      socket.on('error', ({ message }) => {
+        console.error('Socket error:', message);
+      });
     };
 
     initSocketListeners();
 
     return () => {
       if (socket) {
-        ['roomList', 'roomJoined', 'message', 'userConnection', 'typing', 'stopTyping']
-          .forEach(evt => socket.off(evt));
+        [
+          'roomList', 'roomJoined', 'roomHistory', 'message', 
+          'userJoined', 'userLeft', 'typing', 'stopTyping',
+          'readUpdate', 'messageDeleted', 'error'
+        ].forEach(evt => socket.off(evt));
       }
     };
   }, [socket, username, currentRoom]);
@@ -80,9 +129,112 @@ export default function ChatPage({ username, onLogout }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const handleContextMenu = (e, messageId) => {
+    e.preventDefault();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      messageId
+    });
+  };
+
+  const handleDeleteMessage = (deleteForEveryone) => {
+    if (!contextMenu.messageId) return;
+    
+    socket.emit('deleteMessage', { 
+      messageId: contextMenu.messageId, 
+      deleteForEveryone 
+    });
+    setContextMenu({ ...contextMenu, visible: false });
+  };
+
+  const getFileIcon = (mimeType) => {
+    if (mimeType.startsWith('image/')) return '🖼️';
+    if (mimeType.startsWith('video/')) return '🎬';
+    if (mimeType.startsWith('audio/')) return '🎵';
+    if (mimeType.includes('pdf')) return '📄';
+    if (mimeType.includes('word')) return '📝';
+    if (mimeType.includes('zip')) return '🗄️';
+    return '📎';
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const renderFileMessage = (file) => {
+    const canPreview = [
+      'image/jpeg', 'image/png', 'image/gif', 
+      'video/mp4', 'video/webm',
+      'audio/mpeg', 'audio/wav',
+      'application/pdf'
+    ].includes(file.type);
+
+    return (
+      <div className="file-message-container">
+        <div className="file-header">
+          <span className="file-icon">{getFileIcon(file.type)}</span>
+          <div className="file-info">
+            <div className="file-name">{file.name}</div>
+            <div className="file-size">{formatFileSize(file.size)}</div>
+          </div>
+        </div>
+        <div className="file-actions">
+          <button 
+            className="file-action-btn"
+            onClick={() => window.open(file.url, '_blank')}
+            disabled={!canPreview}
+            title={canPreview ? "Open file" : "Preview not available"}
+          >
+            Open
+          </button>
+          <button 
+            className="file-action-btn primary"
+            onClick={() => {
+              const a = document.createElement('a');
+              a.href = file.url;
+              a.download = file.name;
+              a.click();
+            }}
+            title="Download file"
+          >
+            Download
+          </button>
+        </div>
+        {canPreview && (
+          <div className="file-preview">
+            {file.type.startsWith('image/') && (
+              <img src={file.url} alt={file.name} className="file-preview-image" />
+            )}
+            {file.type.startsWith('video/') && (
+              <video controls className="file-preview-video">
+                <source src={file.url} type={file.type} />
+              </video>
+            )}
+            {file.type.startsWith('audio/') && (
+              <audio controls className="file-preview-audio">
+                <source src={file.url} type={file.type} />
+              </audio>
+            )}
+            {file.type.includes('pdf') && (
+              <iframe 
+                src={`https://docs.google.com/viewer?url=${encodeURIComponent(file.url)}&embedded=true`}
+                title={file.name}
+                className="file-preview-pdf"
+              />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !currentRoom) return;
 
     try {
       setInputValue(`Uploading ${file.name}...`);
@@ -104,19 +256,17 @@ export default function ChatPage({ username, onLogout }) {
       xhr.onload = () => {
         if (xhr.status === 200) {
           const response = JSON.parse(xhr.responseText);
-          if (socket && currentRoom) {
-            socket.emit('sendMessage', {
-              content: '',
-              file: {
-                url: response.url,
-                name: response.name,
-                type: response.type,
-                size: response.size
-              },
-              room: currentRoom,
-              username
-            });
-          }
+          socket.emit('sendMessage', {
+            content: '',
+            file: {
+              url: response.url,
+              name: response.name,
+              type: response.type,
+              size: response.size,
+              icon: response.icon,
+              canPreview: response.canPreview
+            }
+          });
           setInputValue('');
           setUploadProgress(0);
         } else {
@@ -134,17 +284,21 @@ export default function ChatPage({ username, onLogout }) {
       setInputValue('Upload failed');
       setUploadProgress(0);
       setTimeout(() => setInputValue(''), 2000);
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   const sendMessage = () => {
-    if (inputValue.trim() && socket && currentRoom) {
-      socket.emit('sendMessage', { 
-        content: inputValue, 
-        room: currentRoom,
-        username
-      });
-      setInputValue('');
+    if ((inputValue.trim() || fileInputRef.current?.files.length) && socket && currentRoom) {
+      if (inputValue.trim()) {
+        socket.emit('sendMessage', { 
+          content: inputValue
+        });
+        setInputValue('');
+      }
       handleStopTyping();
     }
   };
@@ -153,7 +307,7 @@ export default function ChatPage({ username, onLogout }) {
     setInputValue(e.target.value);
     if (!isTyping) {
       setIsTyping(true);
-      socket.emit('typing', { room: currentRoom, username });
+      socket.emit('typing', { room: currentRoom });
     }
     clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(handleStopTyping, 3000);
@@ -162,7 +316,7 @@ export default function ChatPage({ username, onLogout }) {
   const handleStopTyping = () => {
     if (isTyping) {
       setIsTyping(false);
-      socket.emit('stopTyping', { room: currentRoom, username });
+      socket.emit('stopTyping', { room: currentRoom });
     }
     clearTimeout(typingTimeout.current);
   };
@@ -182,6 +336,43 @@ export default function ChatPage({ username, onLogout }) {
 
   return (
     <div className="chat-app">
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div 
+          ref={contextMenuRef}
+          className="context-menu"
+          style={{
+            position: 'fixed',
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+            zIndex: 1000
+          }}
+        >
+          <button 
+            className="context-menu-item"
+            onClick={() => handleDeleteMessage(false)}
+          >
+            Delete for me
+          </button>
+          <button 
+            className="context-menu-item"
+            onClick={() => {
+              if (confirm('Are you sure you want to delete this message for everyone?')) {
+                handleDeleteMessage(true);
+              }
+            }}
+          >
+            Delete for everyone
+          </button>
+          <button 
+            className="context-menu-item"
+            onClick={() => setContextMenu({ ...contextMenu, visible: false })}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="chat-container">
         <aside className="sidebar">
           <div className="sidebar-header">
@@ -218,7 +409,7 @@ export default function ChatPage({ username, onLogout }) {
               <h3>Online Users</h3>
             </div>
             
-            {onlineUsers.map((user) => (
+            {Array.from(new Set([...onlineUsers, username])).map((user) => (
               <div key={user} className="user-item">
                 <span className={`dot ${user === username ? '' : 'user-online'}`}></span>
                 {user}{user === username ? ' (You)' : ''}
@@ -273,45 +464,37 @@ export default function ChatPage({ username, onLogout }) {
               </div>
             ) : (
               <>
-                {messages.map((msg, i) => (
-                  <div 
-                    key={i} 
-                    className={`message-row ${msg.username === username ? 'you' : 'other'}`}
-                  >
-                    <div className="message-bubble">
-                      <div className="msg-user-label">
-                        {msg.username === username ? 'You' : msg.username}
-                      </div>
-                      <div className="msg-text">
-                        {msg.content}
-                        {msg.file && (
-                          <div className="file-message">
-                            {msg.file.type.startsWith('image/') ? (
-                              <img 
-                                src={msg.file.url} 
-                                alt={msg.file.name} 
-                                onClick={() => window.open(msg.file.url, '_blank')}
-                                style={{ cursor: 'pointer', maxWidth: '100%', maxHeight: '200px' }}
-                              />
-                            ) : (
-                              <a 
-                                href={msg.file.url} 
-                                download={msg.file.name}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                📄 {msg.file.name} ({Math.round(msg.file.size / 1024)} KB)
-                              </a>
-                            )}
+                {messages.map((msg, i) => {
+                  if (msg.deletedFor?.includes(username)) {
+                    return null;
+                  }
+
+                  return (
+                    <div 
+                      key={msg._id || i} 
+                      className={`message-row ${msg.username === username ? 'you' : 'other'}`}
+                      onContextMenu={(e) => handleContextMenu(e, msg._id)}
+                    >
+                      <div className="message-bubble">
+                        <div className="msg-user-label">
+                          {msg.username === username ? 'You' : msg.username}
+                          {msg.readBy?.includes(msg.username === username ? username : msg.username) && (
+                            <span className="read-receipt">✓✓</span>
+                          )}
+                        </div>
+                        <div className="msg-text">
+                          {msg.content}
+                          {msg.file && renderFileMessage(msg.file)}
+                        </div>
+                        <div className="msg-meta">
+                          <div className="msg-time">
+                            {new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
-                        )}
-                      </div>
-                      <div className="msg-time">
-                        {new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </>
             )}
@@ -345,7 +528,7 @@ export default function ChatPage({ username, onLogout }) {
                 ref={fileInputRef}
                 className="file-input"
                 onChange={handleFileUpload}
-                accept="audio/*,video/*,image/*,.pdf,.ppt,.pptx,.doc,.docx"
+                accept="audio/*,video/*,image/*,.pdf,.ppt,.pptx,.doc,.docx,.zip"
                 disabled={!currentRoom}
               />
               <input
