@@ -228,23 +228,6 @@ client/
   "@tailwindcss/typography": "^0.5.9",
   "vite": "^5.0.8"
 }
-```
-
-## Deployment
-
-### Backend
-Deploy to services like:
-- Render
-- Railway
-- Heroku
-- AWS EC2
-
-### Frontend
-Deploy to:
-- Vercel
-- Netlify
-- GitHub Pages
-- Firebase Hosting
 
 ## Troubleshooting
 
